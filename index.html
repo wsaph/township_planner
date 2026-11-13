@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Township Production Chain & Inventory Planner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Prompt', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      opacity: 1;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Cloud Profile & Sync Bar -->
+  <div class="bg-slate-900 text-slate-100 border-b border-slate-800 px-4 py-2.5">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5 flex-wrap">
+        <span class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-950/80 border border-emerald-800/80 px-2.5 py-1 rounded-md">
+          ☁️ Turso Cloud Sync
+        </span>
+
+        <!-- Town Selector -->
+        <div class="flex items-center gap-1.5">
+          <select id="townSelect" onchange="handleTownSelectChange()" class="bg-slate-800 border border-slate-700 text-white text-xs sm:text-sm rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 min-w-[150px]">
+            <option value="">-- โหมดออฟไลน์ (ในเครื่อง) --</option>
+          </select>
+          <input type="password" id="quickPinInput" maxlength="8" placeholder="PIN" class="hidden w-20 bg-slate-800 border border-slate-700 text-white text-xs sm:text-sm rounded-lg px-2 py-1.5 text-center focus:outline-none focus:border-emerald-500" />
+          <button id="unlockBtn" onclick="unlockSelectedTown()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg transition">
+            เข้าเมือง
+          </button>
+        </div>
+
+        <button onclick="openCreateTownModal()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium px-2.5 py-1.5 rounded-lg transition">
+          ➕ สร้างโปรไฟล์เมืองใหม่
+        </button>
+
+        <button id="refreshCloudBtn" onclick="reloadCurrentTown()" class="hidden bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 text-xs font-medium px-2.5 py-1.5 rounded-lg transition" title="ดึงข้อมูลล่าสุดจาก Cloud">
+          🔄 โหลดล่าสุด
+        </button>
+
+        <button id="logoutTownBtn" onclick="logoutTown()" class="hidden text-slate-400 hover:text-rose-400 text-xs px-2 py-1 transition">
+          ออกโปรไฟล์
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2 text-xs">
+        <span id="cloudStatusBadge" class="text-slate-400">พร้อมเชื่อมต่อฐานข้อมูล</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 py-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">🚜</span>
+          <h1 class="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Township Production Planner</h1>
+          <span id="activeTownPill" class="hidden text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded-full"></span>
+        </div>
+        <p class="text-xs text-slate-500 mt-0.5">วางแผนเตรียมวัตถุดิบต้นทางและจัดคิวผลิตโรงงานแบบย้อนกลับ (Recursive BOM)</p>
+      </div>
+
+      <!-- Global Controls -->
+      <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+        <!-- Town Level -->
+        <div class="flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg">
+          <label for="townLevelInput" class="text-xs font-semibold text-amber-900 whitespace-nowrap">🏅 เลเวลเมือง:</label>
+          <input type="number" id="townLevelInput" min="1" max="999" value="65" onchange="updateTownLevel(this.value)" class="w-16 text-center font-bold text-sm bg-white border border-amber-300 rounded px-1.5 py-0.5 text-amber-950 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+        </div>
+
+        <!-- Global Target -->
+        <div class="flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg">
+          <label for="globalTargetInput" class="text-xs font-medium text-slate-700 whitespace-nowrap">🎯 เป้าหมายขั้นต่ำ:</label>
+          <input type="number" id="globalTargetInput" min="0" max="999" value="6" class="w-14 text-center font-semibold text-sm bg-white border border-slate-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          <button onclick="applyGlobalTarget()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-2.5 py-1 rounded transition whitespace-nowrap">
+            ใช้กับที่ปลดล็อก
+          </button>
+        </div>
+
+        <!-- Action Buttons -->
+        <button onclick="openCustomRecipeModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition shadow-sm">
+          ➕ เพิ่มสูตรเอง
+        </button>
+        <button onclick="openBackupModal()" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-medium px-3 py-2 rounded-lg transition">
+          💾 สำรอง / กู้คืน
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-5 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- Left Column: Target Inventory & Stock Input (7 cols) -->
+    <section class="lg:col-span-7 flex flex-col gap-4">
+      <!-- Filter & Search Bar -->
+      <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
+        <div class="relative flex-1">
+          <input type="text" id="searchInput" oninput="renderAll()" placeholder="🔍 ค้นหาชื่อสินค้า หรือ โรงงาน (เช่น Cheese, Bread, Sugar)..." class="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-8 py-2 focus:outline-none focus:bg-white focus:border-emerald-500" />
+        </div>
+        <div class="flex flex-wrap items-center gap-3 text-xs">
+          <label class="inline-flex items-center gap-1.5 cursor-pointer select-none text-slate-700 font-medium">
+            <input type="checkbox" id="onlyMissingFilter" onchange="renderAll()" class="rounded text-emerald-600 focus:ring-emerald-500" />
+            เฉพาะที่ยังขาด
+          </label>
+          <label class="inline-flex items-center gap-1.5 cursor-pointer select-none text-slate-600">
+            <input type="checkbox" id="showLockedFilter" onchange="renderAll()" class="rounded text-amber-600 focus:ring-amber-500" />
+            🔒 แสดงที่ยังไม่ปลดล็อก
+          </label>
+          <button onclick="resetAllCurrentStock()" class="text-rose-600 hover:text-rose-700 font-medium underline">
+            ล้างสต็อกเป็น 0
+          </button>
+        </div>
+      </div>
+
+      <!-- Factory Category Tabs -->
+      <div id="factoryTabs" class="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar"></div>
+
+      <!-- Goods List Container -->
+      <div id="goodsContainer" class="space-y-4"></div>
+    </section>
+
+    <!-- Right Column: Calculated Raw Materials & Queue Plan (5 cols) -->
+    <aside class="lg:col-span-5 flex flex-col gap-4">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden sticky top-20">
+        <div class="bg-slate-800 text-white px-4 py-3 flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold flex items-center gap-1.5">📋 สรุปวัตถุดิบต้นทางที่ต้องเตรียม</h2>
+            <p class="text-[11px] text-slate-300 mt-0.5">คำนวณจากยอดที่ขาดทั้งหมดแบบย้อนกลับ</p>
+          </div>
+          <span id="totalMissingBadge" class="bg-emerald-500 text-slate-950 font-bold text-xs px-2.5 py-1 rounded-full">0 รายการ</span>
+        </div>
+
+        <!-- Calculation Mode Toggle -->
+        <div class="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between text-xs">
+          <span class="text-slate-600 font-medium">วิธีคำนวณวัตถุดิบกลาง:</span>
+          <select id="deductIntermediateMode" onchange="renderCalculations()" class="bg-white border border-slate-300 rounded-md px-2 py-1 text-slate-800 font-medium focus:outline-none focus:border-emerald-500">
+            <option value="deduct">หักสต็อกวัตถุดิบกลางที่มีในยุ้งฉางแล้ว</option>
+            <option value="gross">คำนวณต้นทางทั้งหมด (ไม่หักของกลาง)</option>
+          </select>
+        </div>
+
+        <div id="summaryContent" class="p-4 space-y-5 max-h-[calc(100vh-220px)] overflow-y-auto custom-scrollbar">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Create Town Profile Modal -->
+  <div id="createTownModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl border border-slate-200">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-bold text-slate-900">🏙️ สร้างโปรไฟล์เมืองใหม่บน Cloud</h3>
+        <button onclick="closeModal('createTownModal')" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <div class="space-y-3.5 mt-4 text-sm">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">ชื่อเมือง (Town Name) *</label>
+          <input type="text" id="newTownName" placeholder="เช่น PomTown หรือ BangkokCity" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">ตั้งรหัส PIN (4-6 หลัก) *</label>
+          <input type="text" id="newTownPin" maxlength="6" placeholder="เช่น 1234" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500" />
+          <p class="text-[11px] text-slate-500 mt-1">ใช้รหัสนี้เวลาเปิดเมืองของคุณจากคอมพิวเตอร์หรือ iPad เครื่องอื่น</p>
+        </div>
+        <label class="flex items-center gap-2 text-xs text-slate-700 pt-1 cursor-pointer">
+          <input type="checkbox" id="copyCurrentStateToNew" checked class="rounded text-emerald-600" />
+          นำข้อมูลสต็อกและเลเวลที่ตั้งไว้ตอนนี้ไปบันทึกเป็นค่าเริ่มต้นของเมืองใหม่
+        </label>
+        <div id="createTownError" class="hidden text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-2.5"></div>
+      </div>
+      <div class="flex justify-end gap-2 mt-5 pt-3 border-t border-slate-100">
+        <button onclick="closeModal('createTownModal')" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg">ยกเลิก</button>
+        <button id="submitCreateTownBtn" onclick="createTownProfile()" class="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm">สร้างโปรไฟล์เมือง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recipe Tree Modal -->
+  <div id="recipeModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-5 shadow-xl border border-slate-200">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 id="recipeModalTitle" class="text-base font-bold text-slate-900">ผังสูตรการผลิต</h3>
+        <button onclick="closeModal('recipeModal')" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <div id="recipeModalBody" class="mt-4 text-sm space-y-3 max-h-[65vh] overflow-y-auto custom-scrollbar"></div>
+      <div class="flex justify-end mt-4 pt-3 border-t border-slate-100">
+        <button onclick="closeModal('recipeModal')" class="px-4 py-1.5 text-xs font-medium bg-slate-800 text-white rounded-lg">ปิดหน้าต่าง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Recipe Modal -->
+  <div id="customRecipeModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-5 shadow-xl border border-slate-200">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-bold text-slate-900">➕ เพิ่มสูตรสินค้าเอง</h3>
+        <button onclick="closeModal('customRecipeModal')" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <div class="space-y-3 mt-4 text-xs">
+        <div class="grid grid-cols-3 gap-2">
+          <div class="col-span-2">
+            <label class="block font-semibold text-slate-700 mb-1">ชื่อสินค้า (ภาษาอังกฤษ/ไทย)</label>
+            <input type="text" id="custName" placeholder="เช่น Apple Strudel" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">ไอคอน Emoji</label>
+            <input type="text" id="custIcon" value="🥧" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-center" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">หมวด / โรงงาน</label>
+            <input type="text" id="custFactory" placeholder="เช่น Bakery" value="Bakery" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5" />
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">เลเวลปลดล็อก</label>
+            <input type="number" id="custLevel" value="50" min="1" max="999" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5" />
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="font-semibold text-slate-700">ส่วนผสม (เลือกจากรายการที่มีในระบบ)</label>
+            <button type="button" onclick="addIngredientRow()" class="text-indigo-600 font-semibold hover:underline">+ เพิ่มวัตถุดิบ</button>
+          </div>
+          <div id="custIngredientsList" class="space-y-2 max-h-44 overflow-y-auto pr-1"></div>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-5 pt-3 border-t border-slate-100">
+        <button onclick="closeModal('customRecipeModal')" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg">ยกเลิก</button>
+        <button onclick="saveCustomRecipe()" class="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">บันทึกสูตร</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Backup / Restore Modal -->
+  <div id="backupModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-5 shadow-xl border border-slate-200">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-base font-bold text-slate-900">💾 สำรอง / กู้คืนข้อมูล (JSON & Code)</h3>
+        <button onclick="closeModal('backupModal')" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <div class="space-y-4 mt-4 text-xs">
+        <div class="flex flex-wrap gap-2">
+          <button onclick="downloadBackupFile()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-3 py-2 rounded-lg">
+            ⬇️ ดาวน์โหลดไฟล์ .json
+          </button>
+          <label class="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold px-3 py-2 rounded-lg cursor-pointer border border-slate-300">
+            ⬆️ อัปโหลดไฟล์ .json
+            <input type="file" accept=".json" onchange="uploadBackupFile(event)" class="hidden" />
+          </label>
+          <button onclick="copyBackupCode()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-semibold px-3 py-2 rounded-lg">
+            📋 คัดลอกโค้ดสำรอง
+          </button>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">วางโค้ดสำรองข้อมูล (JSON) เพื่อกู้คืน:</label>
+          <textarea id="backupTextarea" rows="5" class="w-full font-mono text-[11px] border border-slate-300 rounded-lg p-2.5 bg-slate-50 focus:bg-white focus:outline-none" placeholder='{"level":65,"stock":{...}}'></textarea>
+          <button onclick="restoreFromTextarea()" class="mt-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold px-4 py-1.5 rounded-lg">
+            กู้คืนข้อมูลจากช่องข้อความ
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. TURSO CLOUD DATABASE CONFIGURATION
+    // =========================================================================
+    const TURSO_HTTP_URL = "https://townshipdb-wsaph.aws-ap-southeast-1.turso.io/v2/pipeline";
+    const TURSO_AUTH_TOKEN = "EyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTQ1Nzg2MTMsImlkIjoiMDFhMWQ1MzUtOWEwMS03ZGI2LThlZTEtZWY3ZmI5YjU4MDA1Iiwia2lkIjoiVjE0dmlnYThBLXYxTkZ5TkswcFFSN0NmbVdKa2Zmd3VxZjRhRkxaWjVlSSIsInJpZCI6ImViNDhmYjI4LTcwMWMtNGZiYy1iZWE3LWE0YWRjNzlhOWI3MSJ9.V-dP0sszcxHDZyVHw8YZFSiHhhRGVffFSdXAkCdl5AJswcE9kjXoOrycgba5XqIEOTrTJKaGXHAVHBjY8cCdCg";
+
+    async function tursoExecute(sql, args = []) {
+      const formattedArgs = args.map(val => {
+        if (val === null || val === undefined) return { type: "null" };
+        if (typeof val === "number") return Number.isInteger(val) ? { type: "integer", value: String(val) } : { type: "float", value: val };
+        return { type: "text", value: String(val) };
+      });
+
+      const response = await fetch(TURSO_HTTP_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${TURSO_AUTH_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          requests: [
+            { type: "execute", stmt: { sql, args: formattedArgs } },
+            { type: "close" }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ไม่สามารถติดต่อฐานข้อมูล Turso ได้`);
+      }
+
+      const data = await response.json();
+      const firstResult = data.results?.[0];
+      if (firstResult?.type === "error") {
+        throw new Error(firstResult.error?.message || "Turso SQL Error");
+      }
+
+      const resultObj = firstResult?.response?.result;
+      if (!resultObj) return [];
+
+      const cols = resultObj.cols.map(c => c.name);
+      return resultObj.rows.map(row => {
+        const obj = {};
+        row.forEach((cell, idx) => {
+          obj[cols[idx]] = cell.type === "null" ? null : cell.value;
+        });
+        return obj;
+      });
+    }
+
+    async function ensureProfilesTable() {
+      await tursoExecute(`
+        CREATE TABLE IF NOT EXISTS profiles (
+          town_name TEXT PRIMARY KEY,
+          pin TEXT NOT NULL,
+          state_json TEXT NOT NULL,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    }
+
+    // =========================================================================
+    // 2. TOWNSHIP ITEMS & RECIPES MASTER DATABASE
+    // =========================================================================
+    const BASE_ITEMS = {
+      // --- CROPS ---
+      wheat: { name: "Wheat", th: "ข้าวสาลี", icon: "🌾", category: "Crop", factory: "Field (พืชไร่)", level: 1, recipe: {} },
+      corn: { name: "Corn", th: "ข้าวโพด", icon: "🌽", category: "Crop", factory: "Field (พืชไร่)", level: 3, recipe: {} },
+      carrot: { name: "Carrot", th: "แครอท", icon: "🥕", category: "Crop", factory: "Field (พืชไร่)", level: 4, recipe: {} },
+      sugarcane: { name: "Sugarcane", th: "อ้อย", icon: "🎋", category: "Crop", factory: "Field (พืชไร่)", level: 7, recipe: {} },
+      cotton: { name: "Cotton", th: "ฝ้าย", icon: "☁️", category: "Crop", factory: "Field (พืชไร่)", level: 9, recipe: {} },
+      strawberry: { name: "Strawberry", th: "สตรอว์เบอร์รี", icon: "🍓", category: "Crop", factory: "Field (พืชไร่)", level: 13, recipe: {} },
+      tomato: { name: "Tomato", th: "มะเขือเทศ", icon: "🍅", category: "Crop", factory: "Field (พืชไร่)", level: 15, recipe: {} },
+      pine_tree: { name: "Pine Tree", th: "ต้นสน", icon: "🌲", category: "Crop", factory: "Field (พืชไร่)", level: 18, recipe: {} },
+      potato: { name: "Potato", th: "มันฝรั่ง", icon: "🥔", category: "Crop", factory: "Field (พืชไร่)", level: 22, recipe: {} },
+      cacao: { name: "Cacao", th: "โกโก้", icon: "🫘", category: "Crop", factory: "Field (พืชไร่)", level: 25, recipe: {} },
+      rubber_tree: { name: "Rubber Tree", th: "ต้นยางพารา", icon: "🌳", category: "Crop", factory: "Field (พืชไร่)", level: 29, recipe: {} },
+      silk: { name: "Silk", th: "ไหม", icon: "🧵", category: "Crop", factory: "Field (พืชไร่)", level: 31, recipe: {} },
+      cork_oak: { name: "Cork Oak", th: "ไม้ก๊อก", icon: "🪵", category: "Crop", factory: "Field (พืชไร่)", level: 38, recipe: {} },
+      pepper: { name: "Pepper", th: "พริกหยวก", icon: "🫑", category: "Crop", factory: "Field (พืชไร่)", level: 43, recipe: {} },
+      mint: { name: "Mint", th: "สะระแหน่", icon: "🌿", category: "Crop", factory: "Field (พืชไร่)", level: 50, recipe: {} },
+      rice: { name: "Rice", th: "ข้าวเจ้า", icon: "🍚", category: "Crop", factory: "Field (พืชไร่)", level: 56, recipe: {} },
+      rose: { name: "Rose", th: "กุหลาบ", icon: "🌹", category: "Crop", factory: "Field (พืชไร่)", level: 61, recipe: {} },
+      jasmine: { name: "Jasmine", th: "มะลิ", icon: "🌼", category: "Crop", factory: "Field (พืชไร่)", level: 67, recipe: {} },
+      coffee_plant: { name: "Coffee Plant", th: "เมล็ดกาแฟ", icon: "☕", category: "Crop", factory: "Field (พืชไร่)", level: 72, recipe: {} },
+      peanut: { name: "Peanut", th: "ถั่วลิสง", icon: "🥜", category: "Crop", factory: "Field (พืชไร่)", level: 75, recipe: {} },
+      apple: { name: "Apple", th: "แอปเปิล", icon: "🍎", category: "Crop", factory: "Field (พืชไร่)", level: 80, recipe: {} },
+      tea_plant: { name: "Tea Plant", th: "ใบชา", icon: "🍃", category: "Crop", factory: "Field (พืชไร่)", level: 84, recipe: {} },
+      soybean: { name: "Soybean", th: "ถั่วเหลือง", icon: "🫛", category: "Crop", factory: "Field (พืชไร่)", level: 90, recipe: {} },
+      lavender: { name: "Lavender", th: "ลาเวนเดอร์", icon: "🪻", category: "Crop", factory: "Field (พืชไร่)", level: 94, recipe: {} },
+
+      // --- FEEDS (Produce 3 per batch in Feed Mill) ---
+      cow_feed: { name: "Cow Feed", th: "อาหารวัว", icon: "🐄", category: "Feed", factory: "Feed Mill", level: 3, batchSize: 3, recipe: { wheat: 2, corn: 1 } },
+      chicken_feed: { name: "Chicken Feed", th: "อาหารไก่", icon: "🐔", category: "Feed", factory: "Feed Mill", level: 5, batchSize: 3, recipe: { wheat: 2, carrot: 1 } },
+      sheep_feed: { name: "Sheep Feed", th: "อาหารแกะ", icon: "🐑", category: "Feed", factory: "Feed Mill", level: 10, batchSize: 3, recipe: { corn: 2, carrot: 2 } },
+      bee_feed: { name: "Bee Feed", th: "อาหารผึ้ง", icon: "🐝", category: "Feed", factory: "Feed Mill", level: 35, batchSize: 3, recipe: { wheat: 3, sugarcane: 1 } },
+      pig_feed: { name: "Pig Feed", th: "อาหารหมู", icon: "🐖", category: "Feed", factory: "Feed Mill", level: 42, batchSize: 3, recipe: { wheat: 2, carrot: 2, corn: 1 } },
+      substrate: { name: "Substrate", th: "ปุ๋ยเห็ด", icon: "🟫", category: "Feed", factory: "Feed Mill", level: 63, batchSize: 3, recipe: { pine_tree: 1, rice: 1, corn: 2 } },
+
+      // --- FARM PRODUCTS ---
+      milk: { name: "Milk", th: "นมวัว", icon: "🥛", category: "Farm", factory: "Farm (ฟาร์มสัตว์)", level: 1, recipe: { cow_feed: 1 } },
+      egg: { name: "Egg", th: "ไข่ไก่", icon: "🥚", category: "Farm", factory: "Farm (ฟาร์มสัตว์)", level: 5, recipe: { chicken_feed: 1 } },
+      wool: { name: "Wool", th: "ขนแกะ", icon: "🧶", category: "Farm", factory: "Farm (ฟาร์มสัตว์)", level: 10, recipe: { sheep_feed: 1 } },
+      honeycomb: { name: "Honeycomb", th: "รวงผึ้ง", icon: "🍯", category: "Farm", factory: "Farm (ฟาร์มสัตว์)", level: 35, recipe: { bee_feed: 1 } },
+      bacon: { name: "Bacon", th: "เบคอน", icon: "🥓", category: "Farm", factory: "Farm (ฟาร์มสัตว์)", level: 42, recipe: { pig_feed: 1 } },
+      down_feather: { name: "Down Feather", th: "ขนนกขาว", icon: "🪶", category: "Farm", factory: "Duck Feeder", level: 48, recipe: { bread: 1 } },
+      colorful_feather: { name: "Colorful Feather", th: "ขนนกสี", icon: "🦚", category: "Farm", factory: "Duck Feeder", level: 48, recipe: { bagel: 1 } },
+      seaweed: { name: "Seaweed", th: "สาหร่ายทะเล", icon: "🌿", category: "Farm", factory: "Otter Pond", level: 58, recipe: { egg: 1 } },
+      scallop: { name: "Scallop", th: "หอยเชลล์", icon: "🐚", category: "Farm", factory: "Otter Pond", level: 58, recipe: { bacon: 1 } },
+      pearl: { name: "Pearl", th: "ไข่มุก", icon: "🦪", category: "Farm", factory: "Otter Pond", level: 58, recipe: { fish: 1 } },
+      mushroom: { name: "Mushroom", th: "เห็ด", icon: "🍄", category: "Farm", factory: "Mushroom Farm", level: 63, recipe: { substrate: 1 } },
+
+      // --- ISLAND & MINE GOODS ---
+      peach: { name: "Peach", th: "ลูกพีช", icon: "🍑", category: "Island", factory: "Frutus Isle", level: 29, recipe: {} },
+      watermelon: { name: "Watermelon", th: "แตงโม", icon: "🍉", category: "Island", factory: "Frutus Isle", level: 29, recipe: {} },
+      plum: { name: "Plum", th: "ลูกพลัม", icon: "🟣", category: "Island", factory: "Frutus Isle", level: 29, recipe: {} },
+      banana: { name: "Banana", th: "กล้วย", icon: "🍌", category: "Island", factory: "Olivia Isle", level: 35, recipe: {} },
+      coconut: { name: "Coconut", th: "มะพร้าว", icon: "🥥", category: "Island", factory: "Olivia Isle", level: 35, recipe: {} },
+      pineapple: { name: "Pineapple", th: "สับปะรด", icon: "🍍", category: "Island", factory: "Olivia Isle", level: 35, recipe: {} },
+      grape: { name: "Grape", th: "องุ่น", icon: "🍇", category: "Island", factory: "Tropica Isle", level: 41, recipe: {} },
+      olive: { name: "Olive", th: "มะกอก", icon: "🫒", category: "Island", factory: "Tropica Isle", level: 41, recipe: {} },
+      lime: { name: "Lime", th: "มะนาว", icon: "🍋", category: "Island", factory: "Tropica Isle", level: 41, recipe: {} },
+      fish: { name: "Fish", th: "ปลา", icon: "🐟", category: "Island", factory: "Fishermen's Isle", level: 52, recipe: {} },
+      shrimp: { name: "Shrimp", th: "กุ้ง", icon: "🦐", category: "Island", factory: "Fishermen's Isle", level: 52, recipe: {} },
+      lobster: { name: "Lobster", th: "กุ้งมังกร", icon: "🦞", category: "Island", factory: "Fishermen's Isle", level: 52, recipe: {} },
+      clay: { name: "Clay", th: "ดินเหนียว", icon: "🧱", category: "Island", factory: "Mine (เหมือง)", level: 58, recipe: {} },
+      bronze_ingot: { name: "Bronze Ingot", th: "แท่งทองแดง", icon: "🥉", category: "Island", factory: "Foundry", level: 21, recipe: {} },
+      silver_ingot: { name: "Silver Ingot", th: "แท่งเงิน", icon: "🥈", category: "Island", factory: "Foundry", level: 21, recipe: {} },
+      gold_ingot: { name: "Gold Ingot", th: "แท่งทองคำ", icon: "🥇", category: "Island", factory: "Foundry", level: 21, recipe: {} },
+      platinum_ingot: { name: "Platinum Ingot", th: "แท่งแพลทินัม", icon: "💎", category: "Island", factory: "Foundry", level: 21, recipe: {} },
+
+      // --- BAKERY ---
+      bread: { name: "Bread", th: "ขนมปัง", icon: "🍞", category: "Factory", factory: "Bakery", level: 2, recipe: { wheat: 2 } },
+      cookies: { name: "Cookies", th: "คุกกี้", icon: "🍪", category: "Factory", factory: "Bakery", level: 5, recipe: { wheat: 2, egg: 2 } },
+      bagel: { name: "Bagel", th: "เบเกิล", icon: "🥯", category: "Factory", factory: "Bakery", level: 8, recipe: { wheat: 2, sugar: 1, egg: 3 } },
+      pizza: { name: "Pizza", th: "พิซซ่า", icon: "🍕", category: "Factory", factory: "Bakery", level: 22, recipe: { wheat: 2, cheese: 1, tomato: 2 } },
+      potato_bread: { name: "Potato Bread", th: "ขนมปังมันฝรั่ง", icon: "🥖", category: "Factory", factory: "Bakery", level: 26, recipe: { wheat: 2, potato: 2, egg: 4 } },
+      banana_bread: { name: "Banana Bread", th: "เค้กกล้วยหอม", icon: "🍌", category: "Factory", factory: "Bakery", level: 41, recipe: { wheat: 2, banana: 3, egg: 2, butter: 1 } },
+      seafood_pizza: { name: "Seafood Pizza", th: "พิซซ่าซีฟู้ด", icon: "🦐", category: "Factory", factory: "Bakery", level: 55, recipe: { wheat: 2, cheese: 1, fish: 1, shrimp: 1 } },
+      mushroom_turnover: { name: "Mushroom Turnover", th: "พายเห็ด", icon: "🥟", category: "Factory", factory: "Bakery", level: 66, recipe: { wheat: 3, mushroom: 2, potato: 1 } },
+      apple_strudel: { name: "Apple Strudel", th: "พายแอปเปิล", icon: "🥧", category: "Factory", factory: "Bakery", level: 82, recipe: { wheat: 2, apple: 2, sugar: 1 } },
+
+      // --- DAIRY FACTORY ---
+      cream: { name: "Cream", th: "ครีม", icon: "🍦", category: "Factory", factory: "Dairy Factory", level: 4, recipe: { milk: 1 } },
+      cheese: { name: "Cheese", th: "ชีส", icon: "🧀", category: "Factory", factory: "Dairy Factory", level: 6, recipe: { milk: 2 } },
+      butter: { name: "Butter", th: "เนย", icon: "🧈", category: "Factory", factory: "Dairy Factory", level: 11, recipe: { milk: 3 } },
+      yogurt: { name: "Yogurt", th: "โยเกิร์ต", icon: "🥣", category: "Factory", factory: "Dairy Factory", level: 21, recipe: { milk: 4 } },
+      peach_yogurt: { name: "Peach Yogurt", th: "โยเกิร์ตพีช", icon: "🍑", category: "Factory", factory: "Dairy Factory", level: 47, recipe: { milk: 2, peach: 2 } },
+      tofu: { name: "Tofu", th: "เต้าหู้", icon: "⬜", category: "Factory", factory: "Dairy Factory", level: 90, recipe: { soybean: 5 } },
+      plant_milk: { name: "Plant Milk", th: "นมถั่วเหลือง", icon: "🥛", category: "Factory", factory: "Dairy Factory", level: 92, recipe: { soybean: 3 } },
+
+      // --- SUGAR FACTORY ---
+      sugar: { name: "Sugar", th: "น้ำตาล", icon: "🧊", category: "Factory", factory: "Sugar Factory", level: 7, recipe: { sugarcane: 1 } },
+      syrup: { name: "Syrup", th: "น้ำเชื่อม", icon: "🫙", category: "Factory", factory: "Sugar Factory", level: 17, recipe: { sugarcane: 2 } },
+      caramel: { name: "Caramel", th: "คาราเมล", icon: "🍮", category: "Factory", factory: "Sugar Factory", level: 24, recipe: { sugarcane: 3 } },
+      honey_caramel: { name: "Honey Caramel", th: "คาราเมลน้ำผึ้ง", icon: "🍯", category: "Factory", factory: "Sugar Factory", level: 36, recipe: { honeycomb: 1, sugarcane: 1 } },
+
+      // --- TEXTILE FACTORY ---
+      cotton_fabric: { name: "Cotton Fabric", th: "ผ้าฝ้าย", icon: "🧻", category: "Factory", factory: "Textile Factory", level: 9, recipe: { cotton: 2 } },
+      yarn: { name: "Yarn", th: "ไหมพรม", icon: "🧶", category: "Factory", factory: "Textile Factory", level: 10, recipe: { wool: 2 } },
+      silk_fabric: { name: "Silk Fabric", th: "ผ้าไหม", icon: "🧣", category: "Factory", factory: "Textile Factory", level: 31, recipe: { silk: 2 } },
+      nylon_thread: { name: "Nylon Thread", th: "ด้ายไนลอน", icon: "🪡", category: "Factory", factory: "Textile Factory", level: 36, recipe: { rubber_tree: 3 } },
+
+      // --- TAILOR SHOP ---
+      shirt: { name: "Shirt", th: "เสื้อเชิ้ต", icon: "👕", category: "Factory", factory: "Tailor Shop", level: 12, recipe: { cotton_fabric: 1 } },
+      sweater: { name: "Sweater", th: "เสื้อกันหนาว", icon: "🧥", category: "Factory", factory: "Tailor Shop", level: 14, recipe: { yarn: 1 } },
+      coat: { name: "Coat", th: "เสื้อโค้ท", icon: "🥼", category: "Factory", factory: "Tailor Shop", level: 20, recipe: { cotton_fabric: 1, yarn: 1 } },
+      hat: { name: "Hat", th: "หมวก", icon: "👒", category: "Factory", factory: "Tailor Shop", level: 31, recipe: { cotton_fabric: 1, silk_fabric: 1 } },
+      dress: { name: "Dress", th: "ชุดเดรส", icon: "👗", category: "Factory", factory: "Tailor Shop", level: 33, recipe: { yarn: 1, silk_fabric: 1 } },
+      suit: { name: "Suit", th: "ชุดสูท", icon: "🤵", category: "Factory", factory: "Tailor Shop", level: 36, recipe: { yarn: 1, cotton_fabric: 1, silk_fabric: 1 } },
+      tyrolean_hat: { name: "Tyrolean Hat", th: "หมวกขนนก", icon: "🎩", category: "Factory", factory: "Tailor Shop", level: 50, recipe: { cotton_fabric: 1, silk_fabric: 1, colorful_feather: 1 } },
+
+      // --- SNACK FACTORY ---
+      popcorn: { name: "Popcorn", th: "ป๊อปคอร์น", icon: "🍿", category: "Factory", factory: "Snack Factory", level: 14, recipe: { corn: 2 } },
+      corn_chips: { name: "Corn Chips", th: "คอร์นชิปส์", icon: "🌮", category: "Factory", factory: "Snack Factory", level: 17, recipe: { corn: 3 } },
+      granola: { name: "Granola", th: "กราโนล่า", icon: "🥣", category: "Factory", factory: "Snack Factory", level: 19, recipe: { wheat: 2, strawberry: 2 } },
+      potato_chips: { name: "Potato Chips", th: "มันฝรั่งทอด", icon: "🥔", category: "Factory", factory: "Snack Factory", level: 22, recipe: { potato: 2 } },
+      canape: { name: "Canape", th: "คานาเป้", icon: "🥪", category: "Factory", factory: "Snack Factory", level: 33, recipe: { bread: 1, cheese: 1, tomato: 1 } },
+      glazed_bacon: { name: "Glazed Bacon", th: "เบคอนเคลือบน้ำผึ้ง", icon: "🥓", category: "Factory", factory: "Snack Factory", level: 45, recipe: { bacon: 2, syrup: 1 } },
+
+      // --- FAST FOOD RESTAURANT ---
+      milkshake: { name: "Milkshake", th: "มิลค์เชค", icon: "🥤", category: "Factory", factory: "Fast Food", level: 16, recipe: { milk: 2, strawberry: 1 } },
+      cheeseburger: { name: "Cheeseburger", th: "ชีสเบอร์เกอร์", icon: "🍔", category: "Factory", factory: "Fast Food", level: 18, recipe: { bread: 2, cheese: 1, tomato: 1 } },
+      sandwich: { name: "Sandwich", th: "แซนด์วิช", icon: "🥪", category: "Factory", factory: "Fast Food", level: 20, recipe: { bread: 1, butter: 1, strawberry: 2 } },
+      french_fries: { name: "French Fries", th: "เฟรนช์ฟรายส์", icon: "🍟", category: "Factory", factory: "Fast Food", level: 23, recipe: { potato: 2, cream: 1 } },
+      baked_potato: { name: "Baked Potato", th: "มันฝรั่งอบชีส", icon: "🥔", category: "Factory", factory: "Fast Food", level: 25, recipe: { potato: 2, cheese: 1, butter: 1 } },
+      fish_and_chips: { name: "Fish and Chips", th: "ฟิชแอนด์ชิปส์", icon: "🐟", category: "Factory", factory: "Fast Food", level: 53, recipe: { fish: 1, potato: 2, lemon_or_lime: 0 } },
+
+      // --- PAPER & RUBBER & PLASTICS ---
+      paper: { name: "Paper", th: "กระดาษ", icon: "📄", category: "Factory", factory: "Paper Factory", level: 18, recipe: { pine_tree: 1 } },
+      paper_towels: { name: "Paper Towels", th: "กระดาษทิชชู", icon: "🧻", category: "Factory", factory: "Paper Factory", level: 21, recipe: { pine_tree: 2 } },
+      wallpaper: { name: "Wallpaper", th: "วอลเปเปอร์", icon: "🖼️", category: "Factory", factory: "Paper Factory", level: 24, recipe: { pine_tree: 2, rubber: 1 } },
+      book: { name: "Book", th: "หนังสือ", icon: "📕", category: "Factory", factory: "Paper Factory", level: 30, recipe: { paper: 2, cotton_fabric: 1 } },
+      rubber: { name: "Rubber", th: "ยางแผ่น", icon: "⚫", category: "Factory", factory: "Rubber Factory", level: 29, recipe: { rubber_tree: 1 } },
+      plastic: { name: "Plastic", th: "พลาสติก", icon: "🧴", category: "Factory", factory: "Rubber Factory", level: 32, recipe: { rubber_tree: 2 } },
+      glue: { name: "Glue", th: "กาว", icon: "🧪", category: "Factory", factory: "Rubber Factory", level: 37, recipe: { rubber_tree: 3 } },
+      plastic_bottle: { name: "Plastic Bottle", th: "ขวดพลาสติก", icon: "🍾", category: "Factory", factory: "Plastics Factory", level: 47, recipe: { plastic: 1 } },
+      toys: { name: "Toys", th: "ของเล่น", icon: "🧸", category: "Factory", factory: "Plastics Factory", level: 49, recipe: { plastic: 1, rubber: 1 } },
+      ball: { name: "Ball", th: "ลูกบอล", icon: "⚽", category: "Factory", factory: "Plastics Factory", level: 52, recipe: { plastic: 1, glue: 1 } },
+
+      // --- ICE CREAM & PASTRY & JAM ---
+      ice_cream: { name: "Ice Cream", th: "ไอศกรีม", icon: "🍨", category: "Factory", factory: "Ice Cream Factory", level: 20, recipe: { milk: 1, cream: 1, sugar: 1 } },
+      popsicle: { name: "Popsicle", th: "ไอศกรีมแท่ง", icon: "🍧", category: "Factory", factory: "Ice Cream Factory", level: 22, recipe: { strawberry: 2, syrup: 1 } },
+      frozen_yogurt: { name: "Frozen Yogurt", th: "โฟรเซนโยเกิร์ต", icon: "🍦", category: "Factory", factory: "Ice Cream Factory", level: 26, recipe: { yogurt: 1, cream: 1, sugar: 1 } },
+      eskimo_pie: { name: "Eskimo Pie", th: "ไอศกรีมเคลือบช็อกโกแลต", icon: "🍫", category: "Factory", factory: "Ice Cream Factory", level: 31, recipe: { ice_cream: 1, cacao: 2 } },
+      pineapple_sorbet: { name: "Pineapple Sorbet", th: "ซอร์เบต์สับปะรด", icon: "🍍", category: "Factory", factory: "Ice Cream Factory", level: 38, recipe: { pineapple: 2, syrup: 1 } },
+      strawberry_jam: { name: "Strawberry Jam", th: "แยมสตรอว์เบอร์รี", icon: "🍓", category: "Factory", factory: "Jam Factory", level: 27, recipe: { strawberry: 3 } },
+      peach_marmalade: { name: "Peach Marmalade", th: "แยมพีช", icon: "🍑", category: "Factory", factory: "Jam Factory", level: 30, recipe: { peach: 3 } },
+      watermelon_jam: { name: "Watermelon Jam", th: "แยมแตงโม", icon: "🍉", category: "Factory", factory: "Jam Factory", level: 33, recipe: { watermelon: 3 } },
+      plum_jam: { name: "Plum Jam", th: "แยมลูกพลัม", icon: "🟣", category: "Factory", factory: "Jam Factory", level: 36, recipe: { plum: 3 } },
+      grape_jelly: { name: "Grape Jelly", th: "เยลลี่องุ่น", icon: "🍇", category: "Factory", factory: "Jam Factory", level: 43, recipe: { grape: 3 } },
+      muffin: { name: "Muffin", th: "มัฟฟิน", icon: "🧁", category: "Factory", factory: "Pastry Factory", level: 24, recipe: { wheat: 2, egg: 3, butter: 1, sugar: 1 } },
+      brownie: { name: "Brownie", th: "บราวนี่", icon: "🍫", category: "Factory", factory: "Pastry Factory", level: 27, recipe: { cacao: 2, butter: 1, syrup: 1 } },
+      cupcake: { name: "Cupcake", th: "คัพเค้ก", icon: "🧁", category: "Factory", factory: "Pastry Factory", level: 30, recipe: { milk: 2, egg: 3, strawberry_jam: 1 } },
+      donut: { name: "Donut", th: "โดนัท", icon: "🍩", category: "Factory", factory: "Pastry Factory", level: 34, recipe: { wheat: 2, sugar: 2, cacao: 1, cream: 1 } },
+      cheesecake: { name: "Cheesecake", th: "ชีสเค้ก", icon: "🍰", category: "Factory", factory: "Pastry Factory", level: 39, recipe: { cookies: 1, cheese: 2, syrup: 1 } },
+      key_lime_pie: { name: "Key Lime Pie", th: "พายมะนาว", icon: "🥧", category: "Factory", factory: "Pastry Factory", level: 44, recipe: { cookies: 1, lime: 2, cream: 1 } },
+      honey_gingerbread: { name: "Honey Gingerbread", th: "ขนมปังขิงน้ำผึ้ง", icon: "🍪", category: "Factory", factory: "Pastry Factory", level: 48, recipe: { wheat: 2, honeycomb: 1, egg: 2 } },
+
+      // --- CANDY & MEXICAN & FURNITURE ---
+      jelly_beans: { name: "Jelly Beans", th: "เยลลี่บีน", icon: "🍬", category: "Factory", factory: "Candy Factory", level: 32, recipe: { strawberry_jam: 1, sugar: 2 } },
+      toffee: { name: "Toffee", th: "ทอฟฟี่", icon: "🤎", category: "Factory", factory: "Candy Factory", level: 34, recipe: { butter: 1, sugar: 2 } },
+      chocolate: { name: "Chocolate", th: "ช็อกโกแลต", icon: "🍫", category: "Factory", factory: "Candy Factory", level: 37, recipe: { cacao: 3, cream: 1, sugar: 1 } },
+      lollipop: { name: "Lollipop", th: "อมยิ้ม", icon: "🍭", category: "Factory", factory: "Candy Factory", level: 40, recipe: { syrup: 2, caramel: 1 } },
+      candy_cane: { name: "Candy Cane", th: "ลูกกวาดไม้เท้า", icon: "🦯", category: "Factory", factory: "Candy Factory", level: 51, recipe: { mint: 2, sugar: 2 } },
+      taco: { name: "Taco", th: "ทาโก้", icon: "🌮", category: "Factory", factory: "Mexican Restaurant", level: 43, recipe: { corn_chips: 1, tomato: 2, pepper: 1 } },
+      burrito: { name: "Burrito", th: "เบอร์ริโต", icon: "🌯", category: "Factory", factory: "Mexican Restaurant", level: 45, recipe: { wheat: 2, cheese: 1, pepper: 2 } },
+      nachos: { name: "Nachos", th: "นาโชส์", icon: "🧀", category: "Factory", factory: "Mexican Restaurant", level: 47, recipe: { corn_chips: 2, cheese: 1, pepper: 1 } },
+      table: { name: "Table", th: "โต๊ะไม้", icon: "🪑", category: "Factory", factory: "Furniture Factory", level: 45, recipe: { pine_tree: 2, glue: 1 } },
+      chair: { name: "Chair", th: "เก้าอี้", icon: "🪑", category: "Factory", factory: "Furniture Factory", level: 46, recipe: { pine_tree: 2, cotton_fabric: 1 } },
+      sofa: { name: "Sofa", th: "โซฟา", icon: "🛋️", category: "Factory", factory: "Furniture Factory", level: 51, recipe: { pine_tree: 2, yarn: 2, down_feather: 1 } },
+      bed: { name: "Bed", th: "เตียงนอน", icon: "🛏️", category: "Factory", factory: "Furniture Factory", level: 55, recipe: { pine_tree: 3, cotton_fabric: 2, down_feather: 2 } },
+
+      // --- SHOE & JEWELRY & ASIAN & BEVERAGE ---
+      flip_flops: { name: "Flip-Flops", th: "รองเท้าแตะ", icon: "🩴", category: "Factory", factory: "Shoe Factory", level: 49, recipe: { rubber: 1, plastic: 1 } },
+      sneakers: { name: "Sneakers", th: "รองเท้าผ้าใบ", icon: "👟", category: "Factory", factory: "Shoe Factory", level: 51, recipe: { rubber: 1, cotton_fabric: 1, nylon_thread: 1 } },
+      boots: { name: "Boots", th: "รองเท้าบูท", icon: "🥾", category: "Factory", factory: "Shoe Factory", level: 54, recipe: { rubber: 2, yarn: 1, glue: 1 } },
+      pendant: { name: "Pendant", th: "จี้เงิน", icon: "📿", category: "Factory", factory: "Jewelry Store", level: 53, recipe: { silver_ingot: 2 } },
+      ring: { name: "Ring", th: "แหวนทอง", icon: "💍", category: "Factory", factory: "Jewelry Store", level: 55, recipe: { gold_ingot: 2, bronze_ingot: 1 } },
+      earrings: { name: "Earrings", th: "ต่างหูมุก", icon: "✨", category: "Factory", factory: "Jewelry Store", level: 59, recipe: { platinum_ingot: 1, pearl: 1 } },
+      sushi_roll: { name: "Sushi Roll", th: "ซูชิโรล", icon: "🍣", category: "Factory", factory: "Asian Restaurant", level: 56, recipe: { rice: 2, fish: 1, seaweed: 1 } },
+      rice_noodles: { name: "Rice Noodles", th: "ก๋วยเตี๋ยว", icon: "🍜", category: "Factory", factory: "Asian Restaurant", level: 58, recipe: { rice: 3, egg: 2, shrimp: 1 } },
+      seafood_salad: { name: "Seafood Salad", th: "สลัดซีฟู้ด", icon: "🥗", category: "Factory", factory: "Asian Restaurant", level: 61, recipe: { scallop: 1, shrimp: 1, seaweed: 1 } },
+      lemonade: { name: "Lemonade", th: "น้ำมะนาว", icon: "🍋", category: "Factory", factory: "Beverage Factory", level: 60, recipe: { lime: 2, sugar: 1, mint: 1 } },
+      grape_fizz: { name: "Grape Fizz", th: "น้ำองุ่นโซดา", icon: "🍇", category: "Factory", factory: "Beverage Factory", level: 62, recipe: { grape: 2, plastic_bottle: 1 } },
+      iced_tea: { name: "Iced Tea", th: "ชาเย็น", icon: "🧊", category: "Factory", factory: "Beverage Factory", level: 85, recipe: { tea_plant: 2, sugar: 1, lime: 1 } }
+    };
+
+    // Clean accidental 0 qty ingredients
+    Object.values(BASE_ITEMS).forEach(item => {
+      Object.keys(item.recipe).forEach(k => {
+        if (!item.recipe[k] || item.recipe[k] <= 0) delete item.recipe[k];
+      });
+    });
+
+    // =========================================================================
+    // 3. APPLICATION STATE & STORAGE MANAGEMENT
+    // =========================================================================
+    const LOCAL_STORAGE_KEY = "township_planner_v3_state";
+
+    let appState = {
+      level: 65,
+      stock: {},
+      targets: {},
+      customItems: {}
+    };
+
+    let activeTown = null; // { town_name, pin }
+    let selectedFactoryTab = "ALL";
+    let saveDebounceTimer = null;
+
+    function getAllItems() {
+      return { ...BASE_ITEMS, ...(appState.customItems || {}) };
+    }
+
+    function loadLocalFallback() {
+      try {
+        const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          appState = {
+            level: parsed.level || 65,
+            stock: parsed.stock || {},
+            targets: parsed.targets || {},
+            customItems: parsed.customItems || {}
+          };
+        } else {
+          // Initialize default target of 6 for unlocked factory items
+          const items = getAllItems();
+          Object.entries(items).forEach(([id, item]) => {
+            if (item.category === "Factory" && item.level <= appState.level) {
+              appState.targets[id] = 6;
+            }
+          });
+        }
+      } catch (e) {
+        console.error("Local load error", e);
+      }
+      document.getElementById("townLevelInput").value = appState.level;
+    }
+
+    function setCloudStatus(text, type = "neutral") {
+      const el = document.getElementById("cloudStatusBadge");
+      el.textContent = text;
+      el.className = "text-xs font-medium px-2 py-0.5 rounded ";
+      if (type === "ok") el.className += "text-emerald-300 bg-emerald-950/70 border border-emerald-800";
+      else if (type === "syncing") el.className += "text-amber-300 bg-amber-950/70 border border-amber-800";
+      else if (type === "error") el.className += "text-rose-300 bg-rose-950/70 border border-rose-800";
+      else el.className += "text-slate-400";
+    }
+
+    function scheduleSave() {
+      // Always save to localStorage immediately
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appState));
+
+      // If logged into a Cloud Town Profile, debounce save to Turso
+      if (activeTown) {
+        setCloudStatus("⏳ กำลังบันทึกขึ้น Cloud...", "syncing");
+        clearTimeout(saveDebounceTimer);
+        saveDebounceTimer = setTimeout(async () => {
+          try {
+            await tursoExecute(
+              "UPDATE profiles SET state_json = ?, updated_at = datetime('now') WHERE town_name = ? AND pin = ?",
+              [JSON.stringify(appState), activeTown.town_name, activeTown.pin]
+            );
+            const now = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+            setCloudStatus(`☁️ บันทึกเมือง ${activeTown.town_name} แล้ว (${now})`, "ok");
+          } catch (err) {
+            setCloudStatus(`⚠️ บันทึก Cloud ไม่สำเร็จ: ${err.message}`, "error");
+          }
+        }, 700);
+      } else {
+        const now = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+        setCloudStatus(`💾 บันทึกในเครื่องแล้ว (${now}) — เลือกเมืองเพื่อซิงก์ Cloud`, "neutral");
+      }
+    }
+
+    // =========================================================================
+    // 4. CLOUD PROFILE HANDLERS
+    // =========================================================================
+    async function initCloudProfiles() {
+      try {
+        setCloudStatus("⏳ กำลังเชื่อมต่อ Turso...", "syncing");
+        await ensureProfilesTable();
+        await refreshTownDropdown();
+
+        // Check if user had an active town saved in session
+        const savedSession = localStorage.getItem("township_active_town_session");
+        if (savedSession) {
+          const { town_name, pin } = JSON.parse(savedSession);
+          const rows = await tursoExecute("SELECT town_name, pin, state_json FROM profiles WHERE town_name = ?", [town_name]);
+          if (rows.length > 0 && String(rows[0].pin) === String(pin)) {
+            activeTown = { town_name, pin };
+            appState = JSON.parse(rows[0].state_json);
+            document.getElementById("townLevelInput").value = appState.level || 65;
+            updateProfileBarUI();
+            renderAll();
+            setCloudStatus(`☁️ เชื่อมต่อเมือง ${town_name} สำเร็จ`, "ok");
+            return;
+          }
+        }
+        setCloudStatus("☁️ เชื่อมต่อ Cloud พร้อมใช้งาน (เลือกหรือสร้างเมือง)", "ok");
+      } catch (err) {
+        console.error(err);
+        setCloudStatus(`⚠️ โหมดออฟไลน์ (${err.message})`, "error");
+      }
+    }
+
+    async function refreshTownDropdown() {
+      const select = document.getElementById("townSelect");
+      const currentVal = activeTown ? activeTown.town_name : select.value;
+      const rows = await tursoExecute("SELECT town_name FROM profiles ORDER BY updated_at DESC");
+
+      select.innerHTML = `<option value="">-- โหมดออฟไลน์ (ในเครื่อง) --</option>`;
+      rows.forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r.town_name;
+        opt.textContent = `🏙️ ${r.town_name}`;
+        select.appendChild(opt);
+      });
+
+      if (currentVal) select.value = currentVal;
+    }
+
+    function handleTownSelectChange() {
+      const val = document.getElementById("townSelect").value;
+      const pinInput = document.getElementById("quickPinInput");
+      const unlockBtn = document.getElementById("unlockBtn");
+
+      if (!val) {
+        logoutTown();
+        return;
+      }
+
+      if (activeTown && activeTown.town_name === val) {
+        pinInput.classList.add("hidden");
+        unlockBtn.classList.add("hidden");
+        return;
+      }
+
+      pinInput.value = "";
+      pinInput.classList.remove("hidden");
+      unlockBtn.classList.remove("hidden");
+      pinInput.focus();
+    }
+
+    async function unlockSelectedTown() {
+      const townName = document.getElementById("townSelect").value;
+      const pin = document.getElementById("quickPinInput").value.trim();
+      if (!townName || !pin) {
+        alert("กรุณากรอกรหัส PIN ของเมืองนี้");
+        return;
+      }
+
+      try {
+        setCloudStatus("⏳ กำลังตรวจสอบ PIN...", "syncing");
+        const rows = await tursoExecute("SELECT town_name, pin, state_json FROM profiles WHERE town_name = ?", [townName]);
+        if (rows.length === 0) {
+          alert("ไม่พบชื่อเมืองนี้ในฐานข้อมูล");
+          return;
+        }
+        if (String(rows[0].pin) !== pin) {
+          setCloudStatus("❌ รหัส PIN ไม่ถูกต้อง", "error");
+          alert("รหัส PIN ไม่ถูกต้องครับ");
+          return;
+        }
+
+        activeTown = { town_name: townName, pin };
+        localStorage.setItem("township_active_town_session", JSON.stringify(activeTown));
+        appState = JSON.parse(rows[0].state_json);
+        document.getElementById("townLevelInput").value = appState.level || 65;
+
+        updateProfileBarUI();
+        renderAll();
+        setCloudStatus(`☁️ โหลดข้อมูลเมือง ${townName} สำเร็จ`, "ok");
+      } catch (err) {
+        setCloudStatus(`⚠️ เกิดข้อผิดพลาด: ${err.message}`, "error");
+      }
+    }
+
+    async function reloadCurrentTown() {
+      if (!activeTown) return;
+      try {
+        setCloudStatus("⏳ กำลังดึงข้อมูลล่าสุด...", "syncing");
+        const rows = await tursoExecute("SELECT state_json FROM profiles WHERE town_name = ? AND pin = ?", [activeTown.town_name, activeTown.pin]);
+        if (rows.length > 0) {
+          appState = JSON.parse(rows[0].state_json);
+          document.getElementById("townLevelInput").value = appState.level || 65;
+          renderAll();
+          const now = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          setCloudStatus(`☁️ อัปเดตข้อมูลล่าสุดแล้ว (${now})`, "ok");
+        }
+      } catch (err) {
+        setCloudStatus(`⚠️ โหลดไม่สำเร็จ: ${err.message}`, "error");
+      }
+    }
+
+    function logoutTown() {
+      activeTown = null;
+      localStorage.removeItem("township_active_town_session");
+      document.getElementById("townSelect").value = "";
+      updateProfileBarUI();
+      loadLocalFallback();
+      renderAll();
+      setCloudStatus("สลับกลับสู่โหมดออฟไลน์ในเครื่องแล้ว", "neutral");
+    }
+
+    function updateProfileBarUI() {
+      const pinInput = document.getElementById("quickPinInput");
+      const unlockBtn = document.getElementById("unlockBtn");
+      const refreshBtn = document.getElementById("refreshCloudBtn");
+      const logoutBtn = document.getElementById("logoutTownBtn");
+      const pill = document.getElementById("activeTownPill");
+
+      if (activeTown) {
+        document.getElementById("townSelect").value = activeTown.town_name;
+        pinInput.classList.add("hidden");
+        unlockBtn.classList.add("hidden");
+        refreshBtn.classList.remove("hidden");
+        logoutBtn.classList.remove("hidden");
+        pill.textContent = `🏙️ เมือง: ${activeTown.town_name}`;
+        pill.classList.remove("hidden");
+      } else {
+        pinInput.classList.add("hidden");
+        unlockBtn.classList.add("hidden");
+        refreshBtn.classList.add("hidden");
+        logoutBtn.classList.add("hidden");
+        pill.classList.add("hidden");
+      }
+    }
+
+    function openCreateTownModal() {
+      document.getElementById("newTownName").value = "";
+      document.getElementById("newTownPin").value = "";
+      document.getElementById("createTownError").classList.add("hidden");
+      document.getElementById("createTownModal").classList.remove("hidden");
+    }
+
+    async function createTownProfile() {
+      const townName = document.getElementById("newTownName").value.trim();
+      const pin = document.getElementById("newTownPin").value.trim();
+      const copyCurrent = document.getElementById("copyCurrentStateToNew").checked;
+      const errBox = document.getElementById("createTownError");
+
+      if (!townName || !pin) {
+        errBox.textContent = "กรุณากรอกทั้งชื่อเมืองและรหัส PIN";
+        errBox.classList.remove("hidden");
+        return;
+      }
+
+      const btn = document.getElementById("submitCreateTownBtn");
+      btn.disabled = true;
+      btn.textContent = "กำลังสร้าง...";
+
+      try {
+        await ensureProfilesTable();
+        const existing = await tursoExecute("SELECT town_name FROM profiles WHERE town_name = ?", [townName]);
+        if (existing.length > 0) {
+          errBox.textContent = "ชื่อเมืองนี้ถูกใช้งานแล้ว กรุณาตั้งชื่ออื่นครับ";
+          errBox.classList.remove("hidden");
+          btn.disabled = false;
+          btn.textContent = "สร้างโปรไฟล์เมือง";
+          return;
+        }
+
+        let initialState = copyCurrent
+          ? JSON.parse(JSON.stringify(appState))
+          : { level: Number(document.getElementById("townLevelInput").value) || 50, stock: {}, targets: {}, customItems: {} };
+
+        if (!copyCurrent) {
+          const items = getAllItems();
+          Object.entries(items).forEach(([id, item]) => {
+            if (item.category === "Factory" && item.level <= initialState.level) {
+              initialState.targets[id] = 6;
+            }
+          });
+        }
+
+        await tursoExecute(
+          "INSERT INTO profiles (town_name, pin, state_json, updated_at) VALUES (?, ?, ?, datetime('now'))",
+          [townName, pin, JSON.stringify(initialState)]
+        );
+
+        activeTown = { town_name: townName, pin };
+        appState = initialState;
+        localStorage.setItem("township_active_town_session", JSON.stringify(activeTown));
+
+        await refreshTownDropdown();
+        updateProfileBarUI();
+        closeModal("createTownModal");
+        renderAll();
+        setCloudStatus(`☁️ สร้างและเชื่อมต่อเมือง ${townName} สำเร็จ!`, "ok");
+      } catch (err) {
+        errBox.textContent = `เกิดข้อผิดพลาด: ${err.message}`;
+        errBox.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "สร้างโปรไฟล์เมือง";
+      }
+    }
+
+    // =========================================================================
+    // 5. RECURSIVE BOM ENGINE & INVENTORY LOGIC
+    // =========================================================================
+    function updateTownLevel(val) {
+      const lvl = Math.max(1, Math.min(999, parseInt(val) || 1));
+      appState.level = lvl;
+      document.getElementById("townLevelInput").value = lvl;
+      scheduleSave();
+      renderAll();
+    }
+
+    function applyGlobalTarget() {
+      const targetVal = Math.max(0, parseInt(document.getElementById("globalTargetInput").value) || 0);
+      const items = getAllItems();
+      Object.entries(items).forEach(([id, item]) => {
+        if (item.category === "Factory") {
+          if (item.level <= appState.level) {
+            appState.targets[id] = targetVal;
+          } else {
+            appState.targets[id] = 0;
+          }
+        }
+      });
+      scheduleSave();
+      renderAll();
+    }
+
+    function updateItemStock(id, val) {
+      const num = Math.max(0, parseInt(val) || 0);
+      appState.stock[id] = num;
+      scheduleSave();
+      renderAll();
+    }
+
+    function adjustItemStock(id, delta) {
+      const curr = appState.stock[id] || 0;
+      updateItemStock(id, Math.max(0, curr + delta));
+    }
+
+    function updateItemTarget(id, val) {
+      const num = Math.max(0, parseInt(val) || 0);
+      appState.targets[id] = num;
+      scheduleSave();
+      renderAll();
+    }
+
+    function resetAllCurrentStock() {
+      if (!confirm("ต้องการรีเซ็ตจำนวน 'มีอยู่ตอนนี้' ของทุกรายการเป็น 0 ใช่ไหม?")) return;
+      appState.stock = {};
+      scheduleSave();
+      renderAll();
+    }
+
+    function computeProductionPlan() {
+      const items = getAllItems();
+      const deductMode = document.getElementById("deductIntermediateMode").value === "deduct";
+
+      // Copy of current stock to deduct intermediates if enabled
+      const tempStock = { ...(appState.stock || {}) };
+
+      const cropsNeeded = {};
+      const farmNeeded = {};
+      const feedNeeded = {};
+      const islandNeeded = {};
+      const intermediateQueue = {}; // Factory items needed as ingredients
+
+      function explode(itemId, qtyNeeded, depth = 0) {
+        if (qtyNeeded <= 0) return;
+        const item = items[itemId];
+        if (!item) return;
+
+        // If this is an intermediate item (depth > 0) and deductMode is ON
+        if (depth > 0 && deductMode) {
+          const available = tempStock[itemId] || 0;
+          if (available > 0) {
+            const used = Math.min(available, qtyNeeded);
+            tempStock[itemId] -= used;
+            qtyNeeded -= used;
+            if (qtyNeeded <= 0) return;
+          }
+        }
+
+        // Categorize requirements
+        if (item.category === "Crop") {
+          cropsNeeded[itemId] = (cropsNeeded[itemId] || 0) + qtyNeeded;
+          return;
+        }
+
+        if (item.category === "Island") {
+          islandNeeded[itemId] = (islandNeeded[itemId] || 0) + qtyNeeded;
+          return;
+        }
+
+        if (item.category === "Farm") {
+          farmNeeded[itemId] = (farmNeeded[itemId] || 0) + qtyNeeded;
+        } else if (item.category === "Feed") {
+          feedNeeded[itemId] = (feedNeeded[itemId] || 0) + qtyNeeded;
+        } else if (item.category === "Factory" && depth > 0) {
+          intermediateQueue[itemId] = (intermediateQueue[itemId] || 0) + qtyNeeded;
+        }
+
+        // Traverse recipe ingredients
+        const recipe = item.recipe || {};
+        const batchSize = item.batchSize || 1;
+        const batches = Math.ceil(qtyNeeded / batchSize);
+
+        Object.entries(recipe).forEach(([ingId, ingQtyPerBatch]) => {
+          explode(ingId, batches * ingQtyPerBatch, depth + 1);
+        });
+      }
+
+      // Start from all unlocked Factory items that have a deficit
+      let deficitCount = 0;
+      Object.entries(items).forEach(([id, item]) => {
+        if (item.category !== "Factory") return;
+        if (item.level > appState.level) return; // Skip locked items
+
+        const target = appState.targets[id] || 0;
+        const current = appState.stock[id] || 0;
+        const missing = Math.max(0, target - current);
+
+        if (missing > 0) {
+          deficitCount++;
+          explode(id, missing, 0);
+        }
+      });
+
+      return {
+        deficitCount,
+        cropsNeeded,
+        farmNeeded,
+        feedNeeded,
+        islandNeeded,
+        intermediateQueue
+      };
+    }
+
+    // =========================================================================
+    // 6. UI RENDERING
+    // =========================================================================
+    function renderFactoryTabs() {
+      const items = getAllItems();
+      const showLocked = document.getElementById("showLockedFilter").checked;
+      const factories = new Set(["ALL"]);
+
+      Object.values(items).forEach(item => {
+        if (item.category === "Factory") {
+          if (showLocked || item.level <= appState.level) {
+            factories.add(item.factory);
+          }
+        }
+      });
+
+      const container = document.getElementById("factoryTabs");
+      container.innerHTML = "";
+
+      factories.forEach(fac => {
+        const isActive = selectedFactoryTab === fac;
+        const btn = document.createElement("button");
+        btn.className = `px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition border ${
+          isActive
+            ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+        }`;
+        btn.textContent = fac === "ALL" ? "🏭 ทุกโรงงาน" : fac;
+        btn.onclick = () => {
+          selectedFactoryTab = fac;
+          renderAll();
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    function renderGoodsList() {
+      const items = getAllItems();
+      const search = document.getElementById("searchInput").value.trim().toLowerCase();
+      const onlyMissing = document.getElementById("onlyMissingFilter").checked;
+      const showLocked = document.getElementById("showLockedFilter").checked;
+
+      // Group factory items by factory name
+      const grouped = {};
+      Object.entries(items).forEach(([id, item]) => {
+        if (item.category !== "Factory") return;
+        const isLocked = item.level > appState.level;
+        if (isLocked && !showLocked) return;
+        if (selectedFactoryTab !== "ALL" && item.factory !== selectedFactoryTab) return;
+
+        if (search) {
+          const matchText = `${item.name} ${item.th} ${item.factory}`.toLowerCase();
+          if (!matchText.includes(search)) return;
+        }
+
+        const target = appState.targets[id] || 0;
+        const current = appState.stock[id] || 0;
+        const missing = isLocked ? 0 : Math.max(0, target - current);
+
+        if (onlyMissing && missing <= 0) return;
+
+        if (!grouped[item.factory]) grouped[item.factory] = [];
+        grouped[item.factory].push({ id, ...item, target, current, missing, isLocked });
+      });
+
+      const container = document.getElementById("goodsContainer");
+      container.innerHTML = "";
+
+      const factoryNames = Object.keys(grouped);
+      if (factoryNames.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500 text-sm">
+            🎉 ไม่พบรายการสินค้าที่ตรงกับเงื่อนไข หรือคุณเตรียมสต็อกครบตามเป้าหมายทั้งหมดแล้ว!
+          </div>
+        `;
+        return;
+      }
+
+      factoryNames.forEach(facName => {
+        const list = grouped[facName].sort((a, b) => a.level - b.level);
+        const minLvl = Math.min(...list.map(x => x.level));
+
+        const card = document.createElement("div");
+        card.className = "bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden";
+
+        let rowsHtml = list.map(item => {
+          const pct = item.target > 0 ? Math.min(100, Math.round((item.current / item.target) * 100)) : 100;
+          const statusColor = item.isLocked
+            ? "bg-slate-100 text-slate-400"
+            : item.missing > 0
+            ? "bg-rose-50 text-rose-700 border-rose-200"
+            : "bg-emerald-50 text-emerald-700 border-emerald-200";
+
+          return `
+            <div class="p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-100 ${item.isLocked ? "opacity-55 bg-slate-50/60" : "hover:bg-slate-50/70"}">
+              <div class="flex items-center gap-3 min-w-0">
+                <button onclick="openRecipeTree('${item.id}')" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-indigo-50 border border-slate-200 flex items-center justify-center text-xl shrink-0 transition" title="คลิกเพื่อดูผังสูตรย้อนกลับ">
+                  ${item.icon}
+                </button>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="font-semibold text-sm text-slate-900 truncate">${item.name}</span>
+                    <span class="text-xs text-slate-500">(${item.th})</span>
+                    <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Lv.${item.level}</span>
+                    ${item.isLocked ? `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">🔒 ยังไม่ปลดล็อก</span>` : ""}
+                  </div>
+                  <div class="flex items-center gap-2 mt-1">
+                    <div class="w-24 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div class="h-full ${item.missing > 0 ? "bg-amber-500" : "bg-emerald-500"}" style="width: ${pct}%"></div>
+                    </div>
+                    <button onclick="openRecipeTree('${item.id}')" class="text-[11px] text-indigo-600 hover:underline">ดูผังสูตร ↗</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Inputs: Current Stock & Target -->
+              <div class="flex items-center gap-2 sm:gap-3 self-end sm:self-center">
+                <div class="flex flex-col items-center">
+                  <span class="text-[10px] text-slate-400 mb-0.5">มีอยู่ตอนนี้</span>
+                  <div class="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden">
+                    <button onclick="adjustItemStock('${item.id}', -1)" class="px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-100">-</button>
+                    <input type="number" min="0" value="${item.current}" onchange="updateItemStock('${item.id}', this.value)" class="w-11 text-center text-xs font-bold text-slate-900 focus:outline-none" />
+                    <button onclick="adjustItemStock('${item.id}', 1)" class="px-2 py-1 text-xs font-bold text-slate-600 hover:bg-slate-100">+</button>
+                  </div>
+                </div>
+
+                <div class="flex flex-col items-center">
+                  <span class="text-[10px] text-slate-400 mb-0.5">เป้าหมาย</span>
+                  <input type="number" min="0" value="${item.target}" onchange="updateItemTarget('${item.id}', this.value)" class="w-12 text-center text-xs font-semibold border border-slate-200 bg-slate-50 rounded-lg py-1 text-slate-700 focus:bg-white focus:border-emerald-500 focus:outline-none" />
+                </div>
+
+                <div class="w-16 text-right">
+                  <span class="inline-block text-xs font-bold px-2 py-1 rounded-lg border ${statusColor}">
+                    ${item.isLocked ? "-" : item.missing > 0 ? `ขาด ${item.missing}` : "ครบ ✓"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        card.innerHTML = `
+          <div class="bg-slate-50 px-4 py-2.5 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-xs sm:text-sm text-slate-800">🏭 ${facName}</span>
+              <span class="text-[11px] text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full">ปลดล็อก Lv.${minLvl}+</span>
+            </div>
+            <span class="text-xs text-slate-500">${list.length} รายการ</span>
+          </div>
+          <div>${rowsHtml}</div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    function renderCalculations() {
+      const items = getAllItems();
+      const plan = computeProductionPlan();
+      document.getElementById("totalMissingBadge").textContent = `${plan.deficitCount} สินค้าที่ขาด`;
+
+      const container = document.getElementById("summaryContent");
+
+      if (plan.deficitCount === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8 text-slate-500 text-xs space-y-2">
+            <div class="text-3xl">✅</div>
+            <p class="font-semibold text-slate-700 text-sm">สต็อกสินค้าครบตามเป้าหมายทุกชิ้นแล้ว!</p>
+            <p>ลองเพิ่มตัวเลขเป้าหมาย หรือลดจำนวน "มีอยู่ตอนนี้" เพื่อดูรายการวัตถุดิบที่ต้องเตรียม</p>
+          </div>
+        `;
+        return;
+      }
+
+      const renderSection = (title, badgeColor, entries, extraNoteFn = null) => {
+        if (entries.length === 0) return "";
+        const rows = entries
+          .sort((a, b) => b[1] - a[1])
+          .map(([id, qty]) => {
+            const item = items[id];
+            const inBarn = appState.stock[id] || 0;
+            const extra = extraNoteFn ? extraNoteFn(item, qty) : "";
+            return `
+              <div class="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg border border-slate-200/80">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="text-lg">${item.icon}</span>
+                  <div class="min-w-0">
+                    <div class="text-xs font-semibold text-slate-900 truncate">${item.name} <span class="font-normal text-slate-500">(${item.th})</span></div>
+                    ${extra ? `<div class="text-[10px] text-indigo-600 font-medium">${extra}</div>` : `<div class="text-[10px] text-slate-400">ในยุ้งฉางมีอยู่: ${inBarn}</div>`}
+                  </div>
+                </div>
+                <span class="text-xs font-bold px-2.5 py-1 rounded-md ${badgeColor} shrink-0">
+                  ต้องใช้ ${qty}
+                </span>
+              </div>
+            `;
+          })
+          .join("");
+
+        return `
+          <div>
+            <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wide mb-2 flex items-center justify-between">
+              <span>${title}</span>
+              <span class="text-[11px] font-normal text-slate-400">${entries.length} ชนิด</span>
+            </h3>
+            <div class="space-y-1.5">${rows}</div>
+          </div>
+        `;
+      };
+
+      const cropsEntries = Object.entries(plan.cropsNeeded);
+      const farmEntries = Object.entries(plan.farmNeeded);
+      const feedEntries = Object.entries(plan.feedNeeded);
+      const islandEntries = Object.entries(plan.islandNeeded);
+      const interEntries = Object.entries(plan.intermediateQueue);
+
+      container.innerHTML = [
+        renderSection("🌾 1. พืชไร่ที่ต้องปลูก (Crops)", "bg-emerald-100 text-emerald-900", cropsEntries),
+        renderSection("🐄 2. ผลผลิตฟาร์มสัตว์ (Farm Products)", "bg-amber-100 text-amber-900", farmEntries),
+        renderSection(
+          "🥣 3. อาหารสัตว์ที่ต้องปั่น (Feed Mill)",
+          "bg-orange-100 text-orange-900",
+          feedEntries,
+          (item, qty) => `ปั่น ${Math.ceil(qty / 3)} รอบ (ได้รอบละ 3 ถุง)`
+        ),
+        renderSection("🏝️ 4. ของจากเกาะและเหมือง (Island & Mine)", "bg-sky-100 text-sky-900", islandEntries),
+        renderSection(
+          "⚙️ 5. คิววัตถุดิบโรงงานขั้นต้น (Intermediate)",
+          "bg-indigo-100 text-indigo-900",
+          interEntries,
+          (item) => `ผลิตที่: ${item.factory}`
+        )
+      ].join("");
+    }
+
+    function renderAll() {
+      renderFactoryTabs();
+      renderGoodsList();
+      renderCalculations();
+    }
+
+    // =========================================================================
+    // 7. MODALS: RECIPE TREE, CUSTOM RECIPE, BACKUP
+    // =========================================================================
+    function openRecipeTree(itemId) {
+      const items = getAllItems();
+      const root = items[itemId];
+      if (!root) return;
+
+      document.getElementById("recipeModalTitle").textContent = `${root.icon} ผังสูตรการผลิต: ${root.name} (${root.th})`;
+
+      function buildTreeHtml(id, qty, level = 0) {
+        const it = items[id];
+        if (!it) return "";
+        const indent = level * 18;
+        const recipeEntries = Object.entries(it.recipe || {});
+        const batchNote = it.batchSize ? ` (ผลิตทีละ ${it.batchSize})` : "";
+
+        let html = `
+          <div style="margin-left: ${indent}px" class="flex items-center justify-between py-1.5 px-2.5 rounded-lg ${level === 0 ? "bg-indigo-50 border border-indigo-200 font-bold" : "bg-slate-50 border border-slate-200/70"}">
+            <div class="flex items-center gap-2">
+              <span>${it.icon}</span>
+              <span class="text-xs text-slate-800">${it.name} <span class="text-slate-500 font-normal">(${it.th})</span></span>
+              <span class="text-[10px] text-slate-400">[${it.factory}]${batchNote}</span>
+            </div>
+            <span class="text-xs font-bold text-indigo-700">× ${qty}</span>
+          </div>
+        `;
+
+        recipeEntries.forEach(([subId, subQty]) => {
+          html += buildTreeHtml(subId, subQty * qty, level + 1);
+        });
+        return html;
+      }
+
+      document.getElementById("recipeModalBody").innerHTML = buildTreeHtml(itemId, 1, 0);
+      document.getElementById("recipeModal").classList.remove("hidden");
+    }
+
+    function openCustomRecipeModal() {
+      document.getElementById("custIngredientsList").innerHTML = "";
+      addIngredientRow();
+      addIngredientRow();
+      document.getElementById("customRecipeModal").classList.remove("hidden");
+    }
+
+    function addIngredientRow() {
+      const items = getAllItems();
+      const optionsHtml = Object.entries(items)
+        .sort((a, b) => a[1].name.localeCompare(b[1].name))
+        .map(([id, it]) => `<option value="${id}">${it.icon} ${it.name} (${it.th})</option>`)
+        .join("");
+
+      const row = document.createElement("div");
+      row.className = "flex items-center gap-2";
+      row.innerHTML = `
+        <select class="ing-select flex-1 border border-slate-300 rounded-lg px-2 py-1.5 bg-white">${optionsHtml}</select>
+        <input type="number" min="1" value="1" class="ing-qty w-16 border border-slate-300 rounded-lg px-2 py-1.5 text-center" />
+        <button type="button" onclick="this.parentElement.remove()" class="text-rose-500 font-bold px-1.5">✕</button>
+      `;
+      document.getElementById("custIngredientsList").appendChild(row);
+    }
+
+    function saveCustomRecipe() {
+      const name = document.getElementById("custName").value.trim();
+      const icon = document.getElementById("custIcon").value.trim() || "📦";
+      const factory = document.getElementById("custFactory").value.trim() || "Custom Factory";
+      const level = parseInt(document.getElementById("custLevel").value) || 1;
+
+      if (!name) {
+        alert("กรุณากรอกชื่อสินค้า");
+        return;
+      }
+
+      const recipe = {};
+      document.querySelectorAll("#custIngredientsList > div").forEach(row => {
+        const id = row.querySelector(".ing-select").value;
+        const qty = parseInt(row.querySelector(".ing-qty").value) || 0;
+        if (id && qty > 0) {
+          recipe[id] = (recipe[id] || 0) + qty;
+        }
+      });
+
+      const slug = "custom_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_") + "_" + Date.now();
+      appState.customItems[slug] = {
+        name,
+        th: "สูตรเพิ่มเติม",
+        icon,
+        category: "Factory",
+        factory,
+        level,
+        recipe
+      };
+      appState.targets[slug] = parseInt(document.getElementById("globalTargetInput").value) || 6;
+
+      scheduleSave();
+      closeModal("customRecipeModal");
+      renderAll();
+    }
+
+    function openBackupModal() {
+      document.getElementById("backupTextarea").value = JSON.stringify(appState);
+      document.getElementById("backupModal").classList.remove("hidden");
+    }
+
+    function downloadBackupFile() {
+      const blob = new Blob([JSON.stringify(appState, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const prefix = activeTown ? activeTown.town_name : "township_backup";
+      a.href = url;
+      a.download = `${prefix}_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function uploadBackupFile(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          if (!parsed || typeof parsed !== "object") throw new Error("Invalid format");
+          appState = {
+            level: parsed.level || 65,
+            stock: parsed.stock || {},
+            targets: parsed.targets || {},
+            customItems: parsed.customItems || {}
+          };
+          document.getElementById("townLevelInput").value = appState.level;
+          scheduleSave();
+          renderAll();
+          closeModal("backupModal");
+          alert("กู้คืนข้อมูลจากไฟล์สำเร็จ!");
+        } catch (err) {
+          alert("ไฟล์ไม่ถูกต้อง: " + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function copyBackupCode() {
+      const ta = document.getElementById("backupTextarea");
+      ta.select();
+      navigator.clipboard.writeText(ta.value);
+      alert("คัดลอกโค้ดสำรองข้อมูลเรียบร้อยแล้ว");
+    }
+
+    function restoreFromTextarea() {
+      try {
+        const parsed = JSON.parse(document.getElementById("backupTextarea").value.trim());
+        appState = {
+          level: parsed.level || 65,
+          stock: parsed.stock || {},
+          targets: parsed.targets || {},
+          customItems: parsed.customItems || {}
+        };
+        document.getElementById("townLevelInput").value = appState.level;
+        scheduleSave();
+        renderAll();
+        closeModal("backupModal");
+        alert("กู้คืนข้อมูลเรียบร้อยแล้ว!");
+      } catch (err) {
+        alert("รูปแบบโค้ดไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง");
+      }
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add("hidden");
+    }
+
+    // =========================================================================
+    // 8. BOOTSTRAP APPLICATION
+    // =========================================================================
+    window.addEventListener("DOMContentLoaded", () => {
+      loadLocalFallback();
+      renderAll();
+      initCloudProfiles();
+    });
+  </script>
+</body>
+</html>
