@@ -287,12 +287,9 @@
   </div>
 
   <script>
+// =========================================================================
+    // 1. TURSO CLOUD DATABASE CONFIGURATION (VIA VERCEL API)
     // =========================================================================
-    // 1. TURSO CLOUD DATABASE CONFIGURATION
-    // =========================================================================
-    const TURSO_HTTP_URL = "https://townshipdb-wsaph.aws-ap-southeast-1.turso.io/v2/pipeline";
-    const TURSO_AUTH_TOKEN = "EyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTQ1Nzg2MTMsImlkIjoiMDFhMWQ1MzUtOWEwMS03ZGI2LThlZTEtZWY3ZmI5YjU4MDA1Iiwia2lkIjoiVjE0dmlnYThBLXYxTkZ5TkswcFFSN0NmbVdKa2Zmd3VxZjRhRkxaWjVlSSIsInJpZCI6ImViNDhmYjI4LTcwMWMtNGZiYy1iZWE3LWE0YWRjNzlhOWI3MSJ9.V-dP0sszcxHDZyVHw8YZFSiHhhRGVffFSdXAkCdl5AJswcE9kjXoOrycgba5XqIEOTrTJKaGXHAVHBjY8cCdCg";
-
     async function tursoExecute(sql, args = []) {
       const formattedArgs = args.map(val => {
         if (val === null || val === undefined) return { type: "null" };
@@ -300,10 +297,9 @@
         return { type: "text", value: String(val) };
       });
 
-      const response = await fetch(TURSO_HTTP_URL, {
+      const response = await fetch("/api/profile", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${TURSO_AUTH_TOKEN}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -315,7 +311,7 @@
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ไม่สามารถติดต่อฐานข้อมูล Turso ได้`);
+        throw new Error(`HTTP ${response.status}: ไม่สามารถติดต่อเซิร์ฟเวอร์ได้`);
       }
 
       const data = await response.json();
@@ -331,6 +327,11 @@
       return resultObj.rows.map(row => {
         const obj = {};
         row.forEach((cell, idx) => {
+          obj[cols[idx]] = cell.type === "null" ? null : cell.value;
+        });
+        return obj;
+      });
+    }ow.forEach((cell, idx) => {
           obj[cols[idx]] = cell.type === "null" ? null : cell.value;
         });
         return obj;
